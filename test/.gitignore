@@ -1,0 +1,11 @@
+*.exe
+*.out
+*.swp
+test.xz
+test.gz
+test.lzo
+test.txt
+test.big.*
+test.out.txt
+.obj
+*.stackdump
