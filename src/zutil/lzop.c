@@ -39,7 +39,7 @@
 #include <lzo/lzo1x.h>
 #endif
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define PD(fmt, ...) printf("DEBUG " fmt, __VA_ARGS__)
@@ -65,6 +65,12 @@
 #define fromLe16(__be_num) __inv16(__be_num)
 #define fromBe8(__be_num)  (__be_num)
 #define fromLe8(__be_num)  (__be_num)
+#define toBe32(__be_num) (__be_num)
+#define toLe32(__be_num) __inv32(__be_num)
+#define toBe16(__be_num) (__be_num)
+#define toLe16(__be_num) __inv16(__be_num)
+#define toBe8(__be_num)  (__be_num)
+#define toLe8(__be_num)  (__be_num)
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
 #define fromBe32(__be_num) __inv32(__be_num)
 #define fromLe32(__be_num) (__be_num)
@@ -72,6 +78,12 @@
 #define fromLe16(__be_num) (__be_num)
 #define fromBe8(__be_num)  (__be_num)
 #define fromLe8(__be_num)  (__be_num)
+#define toBe32(__be_num) __inv32(__be_num)
+#define toLe32(__be_num) (__be_num)
+#define toBe16(__be_num) __inv16(__be_num)
+#define toLe16(__be_num) (__be_num)
+#define toBe8(__be_num)  (__be_num)
+#define toLe8(__be_num)  (__be_num)
 #else
         Error: Endianes not defined
 #endif
@@ -80,12 +92,8 @@
 // memory setup [ from lzop-1.04/src/lzop.c ]
 **************************************************************************/
 
-#if defined(ACC_OS_DOS16) && !defined(ACC_ARCH_I086PM)
-#  define BLOCK_SIZE        (128*1024l)
-#else
-#  define BLOCK_SIZE        (256*1024l)
-#endif
-#define MAX_BLOCK_SIZE      (64*1024l*1024l)        /* DO NOT CHANGE */
+#define BLOCK_SIZE        (256*1024l)
+#define MAX_BLOCK_SIZE    (64*1024l*1024l)        /* DO NOT CHANGE */
 
 /* We want to compress the data block at 'in' with length 'IN_LEN' to
  * the block at 'out'. Because the input block may be incompressible,
@@ -153,6 +161,9 @@ static const uint8_t lzop_magic[9] =
 
 /* these bits must be zero */
 #define F_RESERVED      ((F_MASK | F_OS_MASK | F_CS_MASK) ^ 0xffffffffL)
+
+#define ADLER32_INIT_VALUE  1
+#define CRC32_INIT_VALUE    0
 
 static void _lzop_print_header(lzop_streamp strm){
     printf("LZOP Header:\n");
@@ -222,6 +233,7 @@ LZOP_STATUS lzop_inflateInit(lzop_streamp strm){
     strm->data.insize = 0;
     strm->data.outbuf = (uint8_t*) malloc(ZBUFSIZELZOP_IN);
     strm->data.outsize = 0;
+
     strm->data.src_len = 0;
     strm->data.dst_len = 0;
     strm->header.ready = HEADER_NOT_READY;
@@ -234,13 +246,26 @@ LZOP_STATUS lzop_deflateInit(lzop_streamp strm, int level){
     strm->data.insize = 0;
     strm->data.outbuf = (uint8_t*) malloc(ZBUFSIZELZOP_OUT);
     strm->data.outsize = 0;
+    strm->data.wrkmem = (uint8_t*) malloc(LZO1X_999_MEM_COMPRESS);
+    strm->data.wrksize = 0;
+
+    strm->data.src_len = 0;
+    strm->data.dst_len = 0;
+    strm->header.ready = HEADER_NOT_READY;
+    strm->header.size  = 38;
+
     /* Populate Header */
     strm->header.version = 0x1040; /* this implementation is based on LZOP 1.04 */
     strm->header.version_needed_to_extract = 0x0940;
     strm->header.lib_version = lzo_version() & 0xffff;
     strm->header.method = 3; /* M_LZO1X_999 */
     strm->header.level = level;
+    strm->header.flags = F_OS_UNIX | F_ADLER32_D | F_STDIN | F_STDOUT ;
     strm->header.filter = 0;
+    strm->header.mtime_low = 0;
+    strm->header.mtime_high = 0;
+
+    strm->header.chk = 0;
 
 #ifdef DEBUG
     _lzop_print_header(strm);
@@ -263,26 +288,48 @@ LZOP_STATUS lzop_deflateEnd(lzop_streamp strm){
         free(strm->data.inbuf);
     if (strm->data.outbuf)
         free(strm->data.outbuf);
+    if (strm->data.wrkmem)
+        free(strm->data.wrkmem);
     strm->data.inbuf  = 0;
     strm->data.outbuf = 0;
+    strm->data.wrkmem = 0;
     return LZOP_OK;
 }
 
-static size_t _lzop_fillbuffer(lzop_streamp strm, size_t size){
-    PD("FB size: %ld %ld\n", size, strm->avail_in);
+static size_t _lzop_fillbuffer_in(lzop_streamp strm, size_t size){
+    // PD("FBI size: %ld %ld\n", size, strm->avail_in);
     if (strm->data.insize < size && strm->avail_in){
         size_t leftBytes = size - strm->data.insize;
         size_t toBeCopyed =  leftBytes < strm->avail_in ? leftBytes : strm->avail_in;
-        PD("FB lb: %ld tbc:%ld\n", leftBytes, toBeCopyed);
+        // PD("FBI lb: %ld tbc:%ld\n", leftBytes, toBeCopyed);
         memcpy(strm->data.inbuf + strm->data.insize, strm->next_in, toBeCopyed);
         strm->data.insize += toBeCopyed;
-        if (strm->avail_in > toBeCopyed){
-            memcpy(strm->next_in, strm->next_in+toBeCopyed, strm->avail_in-toBeCopyed);
-        }
         strm->avail_in -= toBeCopyed;
+        if (strm->avail_in > 0){
+            memcpy(strm->next_in, strm->next_in+toBeCopyed, strm->avail_in);
+        }
     }
     return strm->data.insize;
 }
+
+/*
+static size_t _lzop_fillbuffer_out(lzop_streamp strm, size_t size){
+    PD("FBO size: %ld %ld\n", size, strm->avail_in);
+    if (strm->data.outsize && strm->avail_out < size){
+        size_t leftBytes = size - strm->avail_out;
+        size_t toBeCopyed =  leftBytes < strm->data.outsize ? leftBytes : strm->data.outsize;
+        PD("FBO lb: %ld tbc:%ld\n", leftBytes, toBeCopyed);
+        memcpy(strm->next_out + strm->offset_out, strm->data.outbuf, toBeCopyed);
+        strm->avail_out -= toBeCopyed;
+        strm->offset_out += toBeCopyed;
+        strm->data.outsize -= toBeCopyed;
+        if (strm->data.outsize > 0){
+            memcpy(strm->data.outbuf, strm->data.outbuf + toBeCopyed, strm->data.outsize);
+        }
+    }
+    return strm->data.insize;
+}
+*/
 
 /*
     magic         9
@@ -305,7 +352,7 @@ static size_t _lzop_fillbuffer(lzop_streamp strm, size_t size){
  */
 static LZOP_STATUS _lzop_header_read(lzop_streamp strm){
     while (!strm->header.ready){
-        if (_lzop_fillbuffer(strm, strm->header.size) < strm->header.size){
+        if (_lzop_fillbuffer_in(strm, strm->header.size) < strm->header.size){
             return LZOP_OK;
         }
         // PD("H_r size: %d %d\n",strm->data.insize, strm->header.size);
@@ -367,6 +414,52 @@ static LZOP_STATUS _lzop_header_read(lzop_streamp strm){
     }
 }
 
+static LZOP_STATUS _lzop_header_write(lzop_streamp strm){
+    if (!strm->header.ready){
+        memcpy(strm->data.outbuf, lzop_magic, sizeof(lzop_magic));
+        strm->data.outsize = sizeof(lzop_magic);
+        *(uint16_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe16(strm->header.version);
+        strm->data.outsize += 2;
+        *(uint16_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe16(strm->header.lib_version);
+        strm->data.outsize += 2;
+        *(uint16_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe16(strm->header.version_needed_to_extract);
+        strm->data.outsize += 2;
+        *(uint8_t*)(&strm->data.outbuf[strm->data.outsize])  = toBe8(strm->header.method);
+        strm->data.outsize += 1;
+        *(uint8_t*)(&strm->data.outbuf[strm->data.outsize])  = toBe8(strm->header.level);
+        strm->data.outsize += 1;
+        *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->header.flags);
+        strm->data.outsize += 4;
+        *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->header.mode);
+        strm->data.outsize += 4;
+        *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->header.mtime_low);
+        strm->data.outsize += 4;
+        *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->header.mtime_high);
+        strm->data.outsize += 4;
+        *(uint8_t*)(&strm->data.outbuf[strm->data.outsize])  = toBe8(strm->header.name_length);
+        strm->data.outsize += 1;
+        strm->header.chk = lzo_adler32(ADLER32_INIT_VALUE, strm->data.outbuf+sizeof(lzop_magic), strm->data.outsize-sizeof(lzop_magic));
+        *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->header.chk);
+        strm->data.outsize += 4;
+
+        strm->header.ready = HEADER_READY;
+#if 0
+        PD("_lzop_header_write: avail_out:%ld, outsize:%ld - %02x %02x %02x %02x %02x %02x %02x %02x\n",
+            strm->avail_out, strm->data.outsize,
+            strm->data.outbuf[0],
+            strm->data.outbuf[1],
+            strm->data.outbuf[2],
+            strm->data.outbuf[3],
+            strm->data.outbuf[4],
+            strm->data.outbuf[5],
+            strm->data.outbuf[6],
+            strm->data.outbuf[7]
+                );
+#endif
+        return LZOP_OK;
+    }
+}
+
 /*
  * Inflate Workflow 
  *    --->  next_in, avail_in
@@ -383,17 +476,15 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
             memcpy(strm->next_out+out_offset, strm->data.outbuf, toBeCopyed);
             strm->avail_out -= toBeCopyed;
             out_offset += toBeCopyed;
-            if(strm->data.outsize > toBeCopyed){
-                strm->data.outsize -= toBeCopyed;
+            strm->data.outsize -= toBeCopyed;
+            if(strm->data.outsize > 0){
                 memcpy(strm->data.outbuf, strm->data.outbuf+toBeCopyed, strm->data.outsize);
-            }else{
-                strm->data.outsize = 0;
             }
             if (strm->avail_out==0){
                 return LZOP_OK;
             }
         }
-        PD("Inflate 001 avail_in: %ld  h_ready: %d  dst_len: %d\n", strm->avail_in, strm->header.ready, strm->data.dst_len);
+        PD("Deflate 001 avail_in: %ld  h_ready: %d  dst_len: %d\n", strm->avail_in, strm->header.ready, strm->data.dst_len);
         /* phase 1, decode the header */
         if (!strm->header.ready){
             if (LZOP_OK != _lzop_header_read(strm)){
@@ -412,7 +503,7 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
                 PD("Inflate blocksize: 0x%08lX\n", strm->header.blocksize);
             }
         }
-    
+
         if (strm->header.ready){
             /*
              * lzop - Block
@@ -425,7 +516,7 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
              */
             /* if src_len / dst_len == 0 we need to retrieve the block header */
             if (strm->data.dst_len == 0){
-                if (_lzop_fillbuffer(strm, strm->header.blocksize) < strm->header.blocksize){
+                if (_lzop_fillbuffer_in(strm, strm->header.blocksize) < strm->header.blocksize){
                     return LZOP_OK;
                 }else{
                     size_t offset = 0;
@@ -458,10 +549,10 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
                     PD("Inflate dst_crc32: 0x%08X\n", strm->data.dst_crc32);
                 }
             }
-    
+
             if (strm->data.dst_len != 0){
                 size_t inlen = strm->data.dst_len < strm->data.src_len ? strm->data.dst_len : strm->data.src_len ;
-                if (_lzop_fillbuffer(strm, inlen) < inlen){
+                if (_lzop_fillbuffer_in(strm, inlen) < inlen){
                     return LZOP_OK;
                 }else{
                     if (strm->data.dst_len < strm->data.src_len){
@@ -479,6 +570,100 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
     return LZOP_OK;
 }
 
-LZOP_STATUS lzop_deflate(lzop_streamp strm){
+LZOP_STATUS lzop_deflate(lzop_streamp strm, LZOP_FLUSH_TYPE flush){
+    size_t out_offset = 0;
+    while(strm->avail_in > 0 || strm->avail_out > 0 ){
+        /* check if there are left bytes that can be copyed in the avail_out */
+        if ( strm->avail_out > 0 && strm->data.outsize ){
+            size_t toBeCopyed = strm->data.outsize > strm->avail_out ? strm->avail_out : strm->data.outsize;
+            memcpy(strm->next_out+out_offset, strm->data.outbuf, toBeCopyed);
+#if 0
+            PD("Deflate 001 Copy: avail_out:%ld, outsize:%ld, tbc:%ld off: %lx - %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                strm->avail_out, strm->data.outsize,
+                toBeCopyed,
+                out_offset,
+                strm->next_out[out_offset+0],
+                strm->next_out[out_offset+1],
+                strm->next_out[out_offset+2],
+                strm->next_out[out_offset+3],
+                strm->next_out[out_offset+4],
+                strm->next_out[out_offset+5],
+                strm->next_out[out_offset+6],
+                strm->next_out[out_offset+7]
+                    );
+#endif
+            strm->avail_out -= toBeCopyed;
+            out_offset += toBeCopyed;
+            strm->data.outsize -= toBeCopyed;
+            if(strm->data.outsize > 0){
+                memcpy(strm->data.outbuf, strm->data.outbuf+toBeCopyed, strm->data.outsize);
+            }
+
+            if (strm->avail_out==0){
+                return LZOP_OK;
+            }
+            if (LZOP_FLUSH == flush && strm->data.outsize == 0 && strm->data.insize == 0){
+                return LZOP_OK;
+            }
+        }
+        //PD("Deflate 001 avail_in: %ld  h_ready: %d  dst_len: %d\n", strm->avail_in, strm->header.ready, strm->data.dst_len);
+        /* phase 1, decode the header */
+        if (!strm->header.ready){
+            if (LZOP_OK != _lzop_header_write(strm)){
+                return LZOP_ERROR;
+            }
+        }
+
+        if (strm->header.ready){
+            /*
+             * lzop - Block
+             *    uint32 - src_len (uncompressed data len)
+             *    uint32 - dst_len (compressed block size)
+             *    uint32 - src_chk (ADLER32 or CRC32)
+             *    char[] - compressed block data
+             *
+             */
+            /* if src_len / dst_len == 0 we need to retrieve the block header */
+            switch(flush){
+                case LZOP_FLUSH:
+                    _lzop_fillbuffer_in(strm, strm->data.insize + strm->avail_in);
+                    break;
+                case LZOP_NO_FLUSH:
+                    if (strm->data.insize < ZBUFSIZELZOP_IN){
+                        if (_lzop_fillbuffer_in(strm, ZBUFSIZELZOP_IN) < ZBUFSIZELZOP_IN){
+                            return LZOP_OK;
+                        }
+                    }
+                    break;
+            }
+
+            if (LZOP_FLUSH == flush || strm->data.insize == ZBUFSIZELZOP_IN){
+                size_t outsize;
+                if(LZO_E_OK != lzo1x_999_compress_level(
+                            strm->data.inbuf,   strm->data.insize,
+                            strm->data.outbuf + strm->data.outsize+(3*4), &outsize,
+                            strm->data.wrkmem,
+                            NULL, 0, 0, strm->header.level)){
+                    return LZOP_ERROR;
+                }
+                strm->data.src_adler32 = lzo_adler32(ADLER32_INIT_VALUE, (lzo_bytep)strm->data.inbuf, strm->data.insize);
+                *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->data.insize);
+                strm->data.outsize += 4;
+                *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(outsize);
+                strm->data.outsize += 4;
+                *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->data.src_adler32);
+                strm->data.outsize += 4;
+                //memcpy(&strm->data.outbuf[strm->data.outsize], strm->data.outbuf, outsize);
+                PD("Deflate 010, insize :%ld, outsize:%ld\n", strm->data.insize, outsize);
+                strm->data.outsize += outsize;
+                strm->data.insize = 0;
+                if (LZOP_FLUSH == flush){
+                    /* ENDFILE */
+                    *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = 0;
+                    strm->data.outsize += 4;
+                }
+            }
+        }
+    }
     return LZOP_OK;
 }

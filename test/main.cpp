@@ -36,11 +36,10 @@
 
 using namespace std;
 
-int test_simple_001_xz() 
+int test_inflate_txt_001(ZFile *zf, const char * filename) 
 {
-	/* Test XZ inflate */
-	ZFileXZ zxz;
-	zxz.open("test.xz", std::ios_base::in);
+	/* test inflate */
+	zf->open(filename, std::ios_base::in);
 
 	const int bufsize = ( 1024 );
 	char * buf = new char[bufsize + 1];
@@ -49,7 +48,7 @@ int test_simple_001_xz()
 	size_t total = 0;
 
 	std::cout << "#### Begin ####" << std::endl ;
-	while ((size = zxz.read(buf, bufsize))){
+	while ((size = zf->read(buf, bufsize))){
 		total += size;
 		std::cout << buf ;
 		memset(buf,0,bufsize + 1);
@@ -57,82 +56,62 @@ int test_simple_001_xz()
 	std::cout << "####  End  ####" << std::endl ;
 	std::cout << "total: " << total << std::endl ;
 
-	zxz.close();
+	zf->close();
 	delete[] buf;
 }
 
-int test_simple_001_gzip() 
+int test_inflate_001(ZFile *zf, const char * filename)
 {
-	/* Test GZIP inflate */
-	ZFileGZ zgz;
-	zgz.open("test.gz", std::ios_base::in);
+	/* test inflate */
+	zf->open(filename, std::ios_base::in);
 
-	const int bufsize = ( 10 );
+	const int bufsize = ( 1024 );
 	char * buf = new char[bufsize + 1];
 	buf[bufsize] = '\0';
 	size_t size;
 	size_t total = 0;
 
 	std::cout << "#### Begin ####" << std::endl ;
-	while ((size = zgz.read(buf, bufsize))){
+	while ((size = zf->read(buf, bufsize))){
 		total += size;
-		std::cout << buf ;
 		memset(buf,0,bufsize + 1);
 	}
 	std::cout << "####  End  ####" << std::endl ;
 	std::cout << "total: " << total << std::endl ;
 
-	zgz.close();
+	zf->close();
 	delete[] buf;
 }
 
-int test_simple_001_lzo() 
+int test_deflate_001(ZFile *zf, const char * infilename, const char * outfilename)
 {
-	/* Test lzoIP inflate */
-	ZFileLZO zlzo;
-	zlzo.open("test.lzo", std::ios_base::in);
+	/* Test XZ deflate */
+	ZFileXZ zxz;
+	zf->open(outfilename, std::ios_base::out);
+	std::ifstream infile (infilename, std::ifstream::binary);
 
-	const int bufsize = ( 10000 );
-	char * buf = new char[bufsize + 1];
-	buf[bufsize] = '\0';
-	size_t size;
-	size_t total = 0;
+	const int bufsize = ( 1024 * 1024 ); /* 1M */
+	char * buf = new char[bufsize];
 
-	std::cout << "#### Begin ####" << std::endl ;
-	while ((size = zlzo.read(buf, bufsize))){
-		total += size;
-		std::cout << buf ;
-		memset(buf,0,bufsize + 1);
-	}
-	std::cout << "####  End  ####" << std::endl ;
-	std::cout << "total: " << total << std::endl ;
+	bool done = false;
+	do {
+		infile.read(buf, bufsize);
+		if (infile){
+			// std::cout << "001 bufsize:"<<bufsize<< std::endl ;
+			zf->write(buf, bufsize);
+		}else{
+			int s = infile.gcount();
+			// std::cout << "001 gcount:"<<s<< std::endl ;
+			zf->write(buf, s);
+			done = true;
+		}
+	}while (!done);
 
-	zlzo.close();
+	zf->close();
+	infile.close();
 	delete[] buf;
 }
 
-int test_big_001_lzo() 
-{
-	/* Test lzoIP inflate */
-	ZFileLZO zlzo;
-	zlzo.open("test.big.txt.9.lzo", std::ios_base::in);
-
-	const int bufsize = ( 10000 );
-	char * buf = new char[bufsize + 1];
-	buf[bufsize] = '\0';
-	size_t size;
-	size_t total = 0;
-
-	while ((size = zlzo.read(buf, bufsize))){
-		total += size;
-		//std::cout << buf ;
-		memset(buf,0,bufsize + 1);
-	}
-	std::cout << "total: " << total << std::endl ;
-
-	zlzo.close();
-	delete[] buf;
-}
 
 int test_compress_001_lzo() 
 {
@@ -357,11 +336,22 @@ int main(){
 	test_compress_004_xz();
 */
 	std::cout << "Test lzo:" << std::endl ;
-	test_simple_001_lzo();
+	ZFileLZO *zlo = new ZFileLZO();
+	test_inflate_txt_001(zlo, "test.lzo");
+	delete zlo;
 	std::cout << "          ---END---" << std::endl ;
+/*
 	std::cout << "Test big lzo:" << std::endl ;
-	//test_big_001_lzo();
-	test_compress_001_lzo();
+	zlo = new ZFileLZO();
+	test_inflate_txt_001(zlo, "test.big.txt.lzo");
+	delete zlo;
+	std::cout << "          ---END---" << std::endl ;
+*/
+
+	std::cout << "Test Deflate lzo:" << std::endl ;
+	zlo = new ZFileLZO();
+	test_deflate_001(zlo, "test.big.txt", "test.big.txt.zutil.lzo");
+	delete zlo;
 	std::cout << "          ---END---" << std::endl ;
 
 	return 0;

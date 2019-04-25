@@ -83,7 +83,7 @@ void ZFileLZO::open(const char* filename, std::ios_base::openmode mode){
 
 void ZFileLZO::close(){
     if (this->mode == std::ios_base::out){
-        int ret = lzop_deflate(&this->strm);
+        int ret = lzop_deflate(&this->strm, LZOP_FLUSH);
         // PD("D [close](out) deflate_end:"<< ret << "avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
         if (this->strm.avail_out != ZBUFSIZELZO_OUT) {
             size_t write_size = ZBUFSIZELZO_OUT - this->strm.avail_out;
@@ -102,6 +102,39 @@ size_t ZFileLZO::write (const char* s, size_t n){
     if (this->mode != std::ios_base::out){
         // Error, Not possible to read here
         return 0;
+    }
+    size_t s_offset = 0;
+
+    while (true) {
+        //PD("D 001 ZBUFSIZEXZ:"<<ZBUFSIZEXZ<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+        if (this->strm.avail_in == 0 && 0 != n) {
+            size_t copy_size = ZBUFSIZELZO_IN > n ? n : ZBUFSIZELZO_IN;
+            std::memcpy(this->inbuf, s + s_offset, copy_size);
+            this->strm.avail_in = copy_size;
+            s_offset += copy_size;
+            n -= copy_size;
+        }
+
+        this->strm.next_in = this->inbuf;
+        this->strm.next_out = this->outbuf;
+
+        PD("D 002 eof:"<<this->fs.eof()<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+        //PD("D 003 "<<" next_in:"<< &((int*)this->strm.next_in[0]) <<" next_out:"<<&((int*)this->strm.next_out[0])<<std::endl);
+        int ret = lzop_deflate(&strm, LZOP_NO_FLUSH);
+        PD("D 010 eof:"<<this->fs.eof()<<" lzo_ret:"<<ret<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+
+        if (this->strm.avail_out != ZBUFSIZELZO_OUT) {
+            size_t write_size = ZBUFSIZELZO_OUT - this->strm.avail_out;
+            this->fs.write((char*)(this->outbuf), write_size);
+            this->strm.avail_out = ZBUFSIZELZO_OUT;
+            this->strm.next_out = this->outbuf;
+        }
+
+        if (0 == n)
+            return s_offset;
+
+        if (ret != LZOP_OK) {
+        }
     }
     return 0;
 }

@@ -73,6 +73,8 @@ typedef struct lzop_data_s{
     size_t insize;
     uint8_t *outbuf;
     size_t outsize;
+    uint8_t *wrkmem;
+    size_t wrksize;
     uint32_t src_len;
     uint32_t dst_len;
     uint32_t src_adler32;
@@ -103,13 +105,19 @@ typedef enum {
     LZOP_ERROR
 } LZOP_STATUS;
 
+typedef enum {
+    LZOP_FLUSH,
+    LZOP_NO_FLUSH
+} LZOP_FLUSH_TYPE;
+
 LZOP_STATUS lzop_inflateInit(lzop_streamp strm);
 LZOP_STATUS lzop_deflateInit(lzop_streamp strm, int level);
 
 LZOP_STATUS lzop_inflateEnd(lzop_streamp strm);
 LZOP_STATUS lzop_deflateEnd(lzop_streamp strm);
 
-LZOP_STATUS lzop_inflate(lzop_streamp strm);LZOP_STATUS lzop_deflate(lzop_streamp strm);
+LZOP_STATUS lzop_inflate(lzop_streamp strm);
+LZOP_STATUS lzop_deflate(lzop_streamp strm, LZOP_FLUSH_TYPE flush);
 
 #ifdef __cplusplus
 }

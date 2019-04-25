@@ -1,9 +1,10 @@
 *.exe
 *.out
 *.swp
-test.xz
-test.gz
-test.lzo
+*.xxd
+*.xz
+*.gz
+*.lzo
 test.txt
 test.big.*
 test.out.txt
