@@ -26,20 +26,21 @@
  */
 
 #include <stdlib.h>
+#ifdef WIN32
+//#define __BYTE_ORDER == __BIG_ENDIAN
+#else
 #include <endian.h>
+#endif
 #include <string.h>
 #include <stdio.h>
 
 #include <zutil/lzop.h>
 
-#ifdef WIN32
-#include <lzo/minilzo.h>
-#else
+
 #include <lzo/lzoconf.h>
 #include <lzo/lzo1x.h>
-#endif
 
-// #define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define PD(fmt, ...) printf("DEBUG " fmt, __VA_ARGS__)
