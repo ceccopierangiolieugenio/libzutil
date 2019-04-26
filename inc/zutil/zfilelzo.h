@@ -51,7 +51,7 @@ private:
     uint8_t * inbuf;
     uint8_t * outbuf;
     size_t offsetbuf;
-    int status;
+    LZOP_STATUS status;
 };
 
 #endif // ZFILELZO_H

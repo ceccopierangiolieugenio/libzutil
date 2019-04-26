@@ -26,21 +26,16 @@
  */
 
 #include <stdlib.h>
-#ifdef WIN32
-//#define __BYTE_ORDER == __BIG_ENDIAN
-#else
-#include <endian.h>
-#endif
+
 #include <string.h>
 #include <stdio.h>
 
 #include <zutil/lzop.h>
 
-
 #include <lzo/lzoconf.h>
 #include <lzo/lzo1x.h>
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define PD(fmt, ...) printf("DEBUG " fmt, __VA_ARGS__)
@@ -59,7 +54,7 @@
            ((( __num & 0x00FF ) << 8 )| \
             (( __num & 0xFF00 ) >> 8 ))
 
-#if   __BYTE_ORDER == __BIG_ENDIAN
+#if   __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define fromBe32(__be_num) (__be_num)
 #define fromLe32(__be_num) __inv32(__be_num)
 #define fromBe16(__be_num) (__be_num)
@@ -72,7 +67,7 @@
 #define toLe16(__be_num) __inv16(__be_num)
 #define toBe8(__be_num)  (__be_num)
 #define toLe8(__be_num)  (__be_num)
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#elif __BYTE_ORDER__  == __ORDER_LITTLE_ENDIAN__
 #define fromBe32(__be_num) __inv32(__be_num)
 #define fromLe32(__be_num) (__be_num)
 #define fromBe16(__be_num) __inv16(__be_num)
@@ -515,10 +510,26 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
              *    char[] - compressed block data
              *
              */
-            /* if src_len / dst_len == 0 we need to retrieve the block header */
+            /* if dst_len == 0 we need to retrieve the block header */
+            /* if the first int src_len == 0 the stream is finished */
+            int fb_len = 0;
             if (strm->data.dst_len == 0){
-                if (_lzop_fillbuffer_in(strm, strm->header.blocksize) < strm->header.blocksize){
-                    return LZOP_OK;
+                if ((fb_len =_lzop_fillbuffer_in(strm, strm->header.blocksize)) < strm->header.blocksize){
+                    if (fb_len == 0){
+                        return LZOP_OK;
+                    }else{
+                        strm->data.src_len = fromBe32(*(uint32_t*)(strm->data.inbuf));
+                        if (0 == strm->data.src_len && 4 == fb_len){
+                            /* the end of the stream is reached */
+                            return LZOP_STREAM_END;
+                        }
+                        if (0 == strm->data.src_len && fb_len > 4){
+                            /* the end of the stream is reached */
+                            return LZOP_STREAM_END;
+                        }
+                    }
+
+
                 }else{
                     size_t offset = 0;
                     strm->data.src_len = fromBe32(*(uint32_t*)(&strm->data.inbuf[offset]));
@@ -548,6 +559,12 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
                     PD("Inflate src_crc32: 0x%08X\n", strm->data.src_crc32);
                     PD("Inflate dst_adler32: 0x%08X\n", strm->data.dst_adler32);
                     PD("Inflate dst_crc32: 0x%08X\n", strm->data.dst_crc32);
+                    if (0 == strm->data.src_len){
+                        return LZOP_STREAM_END;
+                    }
+                    if (strm->data.src_len > BLOCK_SIZE || strm->data.dst_len > BLOCK_SIZE){
+                        return LZOP_CORRUPTED_DATA;
+                    }
                 }
             }
 
@@ -646,6 +663,10 @@ LZOP_STATUS lzop_deflate(lzop_streamp strm, LZOP_FLUSH_TYPE flush){
                             strm->data.wrkmem,
                             NULL, 0, 0, strm->header.level)){
                     return LZOP_ERROR;
+                }
+                if (outsize > strm->data.insize){
+                    outsize = strm->data.insize;
+                    memcpy(strm->data.outbuf + strm->data.outsize+(3*4), strm->data.inbuf, outsize);
                 }
                 strm->data.src_adler32 = lzo_adler32(ADLER32_INIT_VALUE, (lzo_bytep)strm->data.inbuf, strm->data.insize);
                 *(uint32_t*)(&strm->data.outbuf[strm->data.outsize]) = toBe32(strm->data.insize);

@@ -101,8 +101,11 @@ typedef struct lzop_stream_s {
 typedef lzop_stream *lzop_streamp;
 
 typedef enum {
+    LZOP_ERROR,
     LZOP_OK,
-    LZOP_ERROR
+    LZOP_STREAM_END,
+    LZOP_CORRUPTED_DATA
+
 } LZOP_STATUS;
 
 typedef enum {

@@ -160,7 +160,7 @@ size_t ZFileLZO::read (char* s, size_t n){
         PD("D 001 eof:"<<this->fs.eof()<<" out_size:"<<out_size
            <<" copy_size:"<<copy_size<<" s_offset:"<<s_offset<<std::endl);
         PD("D 002 n:"<<n<<" avail_in:"<<this->strm.avail_in<<" avail_out"<<this->strm.avail_out<<std::endl);
-        if (0 == n || (this->fs.eof() && 0 == this->strm.avail_in)){
+        if (0 == n || (this->fs.eof() && 0 == this->strm.avail_in) || LZOP_STREAM_END == this->status){
             return s_offset;
         }
 
@@ -185,13 +185,19 @@ size_t ZFileLZO::read (char* s, size_t n){
              PD("D 004 eof:"<<this->fs.eof()<<" in_len:"<<this->strm.avail_in<<std::endl);
         }
 
-        int ret = lzop_inflate(&this->strm);
+        this->status = lzop_inflate(&this->strm);
 
         PD("D 009 eof:"<<this->fs.eof()<<" in_len:"<< this->strm.avail_out <<std::endl);
-        PD("D 010 eof:"<<this->fs.eof()<<" lzma_ret:"<<ret<<std::endl);
+        PD("D 010 eof:"<<this->fs.eof()<<" lzma_ret:"<<this->status<<std::endl);
 
-        if (ret != LZOP_OK) {
-            throw "Inflate Error!";
+        switch (this->status) {
+            case LZOP_OK:
+            case LZOP_STREAM_END:
+                continue;
+            case LZOP_ERROR:
+            case LZOP_CORRUPTED_DATA:
+                throw "Inflate Error!";
+                return 0;
         }
     }
     return 0;
