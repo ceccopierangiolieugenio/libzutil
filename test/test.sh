@@ -23,13 +23,14 @@ echo -e "##############"
 zcat test.gz | wc
 
 echo -e "#### -LZO- ###"
-cat test.lzo | lzop -d
+cat test.lzo | lzop -d -c
 echo -e "##############"
-cat test.lzo | lzop -d | wc
+cat test.lzo | lzop -d -c | wc
 
 echo "Create file to be tested"
-# dd if=/dev/urandom of=test.big.txt bs=1024 count=$((1024 * 16))
-dd if=/dev/urandom bs=1 count=$((1024 * 1024 + 12345)) | xxd > test.big.txt
+dd if=/dev/urandom count=1 bs=$((1024 * 32 + 12345)) | xxd > test.big.txt
+dd if=/dev/urandom count=1 bs=$((1024 * 1024 * 5 + 1234567)) >> test.big.txt
+dd if=/dev/urandom count=1 bs=$((1024 * 32 + 12345)) | xxd >> test.big.txt
 
 cat test.big.txt | xz -c      > test.big.txt.xz
 # cat test.big.txt | xz -1 -c > test.big.txt.1.xz
