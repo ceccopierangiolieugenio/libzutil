@@ -319,8 +319,10 @@ LZOP_STATUS lzop_deflateInit(lzop_streamp strm, int level){
     ((lzop_header*)(strm->header))->level = level;
     ((lzop_header*)(strm->header))->flags = F_OS_UNIX | F_ADLER32_D | F_STDIN | F_STDOUT ;
     ((lzop_header*)(strm->header))->filter = 0;
+    ((lzop_header*)(strm->header))->mode = 0;
     ((lzop_header*)(strm->header))->mtime_low = 0;
     ((lzop_header*)(strm->header))->mtime_high = 0;
+    ((lzop_header*)(strm->header))->name_length = 0;
 
     ((lzop_header*)(strm->header))->chk = 0;
 
