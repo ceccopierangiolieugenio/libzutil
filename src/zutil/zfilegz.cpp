@@ -36,7 +36,7 @@
 #define ZBUFSIZEGZIP (0x1000 * 0x80) /* 512k */
 #endif
 
-// #define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define PD(_d) do { std::cout << " #(gz) " << _d ;}while(0)
@@ -119,7 +119,7 @@ size_t ZFileGZ::write (const char* s, size_t n){
     size_t s_offset = 0;
 
     while (true) {
-        //PD("D 001 ZBUFSIZEXZ:"<<ZBUFSIZEXZ<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+        //PD("D 001 ZBUFSIZEGZIP:"<<ZBUFSIZEGZIP<<" n:"<<n<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
         if (this->strm.avail_in == 0 && 0 != n) {
             size_t copy_size = ZBUFSIZEGZIP > n ? n : ZBUFSIZEGZIP;
             std::memcpy(this->inbuf, s + s_offset, copy_size);
@@ -132,22 +132,26 @@ size_t ZFileGZ::write (const char* s, size_t n){
         this->strm.next_out = this->outbuf;
 
         PD("D 002 eof:"<<this->fs.eof()<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
-        //PD("D 003 "<<" next_in:"<< &((int*)this->strm.next_in[0]) <<" next_out:"<<&((int*)this->strm.next_out[0])<<std::endl);
-        int ret = deflate(&strm, Z_NO_FLUSH);
-        PD("D 010 eof:"<<this->fs.eof()<<" gzip_ret:"<<ret<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
 
-        if (this->strm.avail_out != ZBUFSIZEGZIP) {
-            size_t write_size = ZBUFSIZEGZIP - this->strm.avail_out;
-            this->fs.write((char*)(this->outbuf), write_size);
-            this->strm.avail_out = ZBUFSIZEGZIP;
-            this->strm.next_out = this->outbuf;
+        while (this->strm.avail_in){
+            int ret = deflate(&strm, Z_NO_FLUSH);
+            PD("<--- D 010 eof:"<<this->fs.eof()<<" gzip_ret:"<<ret<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+
+            if (ret != Z_OK) {
+                return 0;
+            }
+
+            if (this->strm.avail_out != ZBUFSIZEGZIP) {
+                size_t write_size = ZBUFSIZEGZIP - this->strm.avail_out;
+                this->fs.write((char*)(this->outbuf), write_size);
+                this->strm.avail_out = ZBUFSIZEGZIP;
+                this->strm.next_out = this->outbuf;
+            }
         }
 
         if (0 == n)
             return s_offset;
 
-        if (ret != Z_OK) {
-        }
     }
 }
 /*
