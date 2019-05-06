@@ -149,9 +149,9 @@ size_t ZFileGZ::write (const char* s, size_t n){
             }
         }
 
-        if (0 == n)
+        if (0 == n){
             return s_offset;
-
+        }
     }
 }
 /*

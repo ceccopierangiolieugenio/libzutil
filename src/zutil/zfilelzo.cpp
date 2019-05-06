@@ -119,21 +119,25 @@ size_t ZFileLZO::write (const char* s, size_t n){
         this->strm.next_out = this->outbuf;
 
         PD("D 002 eof:"<<this->fs.eof()<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
-        //PD("D 003 "<<" next_in:"<< &((int*)this->strm.next_in[0]) <<" next_out:"<<&((int*)this->strm.next_out[0])<<std::endl);
-        int ret = lzop_deflate(&strm, LZOP_NO_FLUSH);
-        PD("D 010 eof:"<<this->fs.eof()<<" lzo_ret:"<<ret<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
 
-        if (this->strm.avail_out != ZBUFSIZELZO_OUT) {
-            size_t write_size = ZBUFSIZELZO_OUT - this->strm.avail_out;
-            this->fs.write((char*)(this->outbuf), write_size);
-            this->strm.avail_out = ZBUFSIZELZO_OUT;
-            this->strm.next_out = this->outbuf;
+        while (this->strm.avail_in){
+            int ret = lzop_deflate(&strm, LZOP_NO_FLUSH);
+            PD("D 010 eof:"<<this->fs.eof()<<" lzo_ret:"<<ret<<" avail_in:"<<this->strm.avail_in<<" avail_out:"<<this->strm.avail_out<<std::endl);
+
+            if (ret != LZOP_OK) {
+                return 0;
+            }
+
+            if (this->strm.avail_out != ZBUFSIZELZO_OUT) {
+                size_t write_size = ZBUFSIZELZO_OUT - this->strm.avail_out;
+                this->fs.write((char*)(this->outbuf), write_size);
+                this->strm.avail_out = ZBUFSIZELZO_OUT;
+                this->strm.next_out = this->outbuf;
+            }
         }
 
-        if (0 == n)
+        if (0 == n){
             return s_offset;
-
-        if (ret != LZOP_OK) {
         }
     }
     return 0;
