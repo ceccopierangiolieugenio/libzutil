@@ -36,7 +36,7 @@
 #define ZBUFSIZEGZIP (0x1000 * 0x80) /* 512k */
 #endif
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define PD(_d) do { std::cout << " #(gz) " << _d ;}while(0)

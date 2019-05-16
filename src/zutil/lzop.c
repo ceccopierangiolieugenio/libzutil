@@ -35,7 +35,7 @@
 #include <lzo/lzoconf.h>
 #include <lzo/lzo1x.h>
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define PD(fmt, ...) printf("DEBUG " fmt, __VA_ARGS__)
