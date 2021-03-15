@@ -44,6 +44,16 @@
 #endif
 
 
+#define __inv64(__num) \
+           (((__num & 0x00000000000000ffULL ) << 56)| \
+            ((__num & 0x000000000000ff00ULL ) << 40)| \
+            ((__num & 0x0000000000ff0000ULL ) << 24)| \
+            ((__num & 0x00000000ff000000ULL ) << 8 )| \
+            ((__num & 0x000000ff00000000ULL ) >> 8 )| \
+            ((__num & 0x0000ff0000000000ULL ) >> 24)| \
+            ((__num & 0x00ff000000000000ULL ) >> 40)| \
+            ((__num & 0xff00000000000000ULL ) >> 56))
+
 #define __inv32(__num) \
            ((( __num & 0x000000FF ) << 24 )| \
             (( __num & 0x0000FF00 ) << 8  )| \
@@ -55,12 +65,16 @@
             (( __num & 0xFF00 ) >> 8 ))
 
 #if   __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define fromBe64(__be_num) (__be_num)
+#define fromLe64(__be_num) __inv64(__be_num)
 #define fromBe32(__be_num) (__be_num)
 #define fromLe32(__be_num) __inv32(__be_num)
 #define fromBe16(__be_num) (__be_num)
 #define fromLe16(__be_num) __inv16(__be_num)
 #define fromBe8(__be_num)  (__be_num)
 #define fromLe8(__be_num)  (__be_num)
+#define toBe64(__be_num) (__be_num)
+#define toLe64(__be_num) __inv64(__be_num)
 #define toBe32(__be_num) (__be_num)
 #define toLe32(__be_num) __inv32(__be_num)
 #define toBe16(__be_num) (__be_num)
@@ -68,12 +82,16 @@
 #define toBe8(__be_num)  (__be_num)
 #define toLe8(__be_num)  (__be_num)
 #elif __BYTE_ORDER__  == __ORDER_LITTLE_ENDIAN__
+#define fromBe64(__be_num) __inv64(__be_num)
+#define fromLe64(__be_num) (__be_num)
 #define fromBe32(__be_num) __inv32(__be_num)
 #define fromLe32(__be_num) (__be_num)
 #define fromBe16(__be_num) __inv16(__be_num)
 #define fromLe16(__be_num) (__be_num)
 #define fromBe8(__be_num)  (__be_num)
 #define fromLe8(__be_num)  (__be_num)
+#define toBe64(__be_num) __inv64(__be_num)
+#define toLe64(__be_num) (__be_num)
 #define toBe32(__be_num) __inv32(__be_num)
 #define toLe32(__be_num) (__be_num)
 #define toBe16(__be_num) __inv16(__be_num)
@@ -529,7 +547,7 @@ static LZOP_STATUS _lzop_header_write(lzop_streamp strm){
 }
 
 /*
- * Inflate Workflow 
+ * Inflate Workflow
  *    --->  next_in, avail_in
  *           \--> inbuf, insize == dst_len
  *                  \-> inflate -> outbuf, outsize
@@ -562,7 +580,7 @@ LZOP_STATUS lzop_inflate(lzop_streamp strm){
 #ifdef DEBUG
                 _lzop_print_header(strm);
 #endif
-                ((lzop_header*)(strm->header))->blocksize = 4 + 4 + 
+                ((lzop_header*)(strm->header))->blocksize = 4 + 4 +
                     ((((lzop_header*)(strm->header))->flags & F_ADLER32_D)?4:0) +
                     ((((lzop_header*)(strm->header))->flags & F_CRC32_D)?4:0) +
                     ((((lzop_header*)(strm->header))->flags & F_ADLER32_C)?4:0) +
